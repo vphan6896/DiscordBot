@@ -132,3 +132,5 @@ dmypy.json
 ffmpeg*
 *.docx
 discordSecret
+*.m4a
+playlist/*
