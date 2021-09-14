@@ -18,6 +18,11 @@ intents = discord.Intents().all()
 bot = commands.Bot(command_prefix='?', self_deaf=True)
 
 youtube_dl.utils.bug_reports_message = lambda: ''
+
+def my_hook(d):
+    if d['status'] == 'finished':
+        print('Done downloading, now converting ...')
+
 ytdl_format_options = {
     'outtmpl': './playlist/%(title)s-%(id)s.%(ext)s',
     'format': 'bestaudio/best',
@@ -28,6 +33,7 @@ ytdl_format_options = {
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
+    'progress_hooks': [my_hook],
     'default_search': 'auto',
     'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
 }
@@ -61,8 +67,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
 @bot.event
 async def on_ready():
-    act=discord.Activity(name="Vybing")
-    await bot.change_presence(activity=act)
+    game = discord.Game("by Vybing")
+    await bot.change_presence(activity=game)
     print("The bot is ready!")
 
 @bot.command()
@@ -98,7 +104,7 @@ async def play(ctx,url):
             filename = await YTDLSource.from_url(url, loop=bot.loop)
             voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename))
         #Remove file extension from message
-        friendlyFileName = filename.strip("playlist\")
+        friendlyFileName = filename.strip("playlist\\")
         friendlyFileName = friendlyFileName.split('.')[0]
         friendlyFileName = friendlyFileName.replace("_"," ")
         await ctx.send('**Now playing:** {}'.format(friendlyFileName))
