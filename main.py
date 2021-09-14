@@ -24,7 +24,7 @@ def my_hook(d):
         print('Done downloading, now converting ...')
 
 ytdl_format_options = {
-    'outtmpl': './playlist/%(title)s-%(id)s.%(ext)s',
+    'outtmpl': './playlist/%(title)s.%(ext)s',
     'format': 'bestaudio/best',
     'restrictfilenames': True,
     'noplaylist': True,
@@ -96,11 +96,12 @@ async def leave(ctx):
 
 
 @bot.command(name='play', help='To play song')
-async def play(ctx,url):
+async def play(ctx,*url):
     try :
         server = ctx.message.guild
         voice_channel = server.voice_client
         async with ctx.typing():
+            url = ''.join(url)
             filename = await YTDLSource.from_url(url, loop=bot.loop)
             voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename))
         #Remove file extension from message
