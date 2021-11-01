@@ -4,19 +4,6 @@ from discord.ext import commands, tasks
 import youtube_dl
 import sys
 
-secretFile = open("discordSecret", "r")
-clientID = secretFile.readline()
-secret = secretFile.readline()
-token = secretFile.readline()
-secretFile.close()
-
-
-intents = discord.Intents().all()
-
-#activityStatus=discord.Activity(name="Vybing", type=discord.ActivityType.custom)
-#client = discord.Client(intents=intents,activity=activityStatus)
-bot = commands.Bot(command_prefix='?', self_deaf=True)
-
 youtube_dl.utils.bug_reports_message = lambda: ''
 
 def my_hook(d):
@@ -29,13 +16,18 @@ ytdl_format_options = {
     'restrictfilenames': True,
     'noplaylist': True,
     'nocheckcertificate': True,
-    'ignoreerrors': False,
+    'ignoreerrors': True,
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
     'progress_hooks': [my_hook],
     'default_search': 'auto',
-    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
+    'source_address': '0.0.0.0', # bind to ipv4 since ipv6 addresses cause issues sometimes
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '320',
+        }]
 }
 ffmpeg_options = {
     'options': '-vn'
@@ -64,79 +56,110 @@ class YTDLSource(discord.PCMVolumeTransformer):
         filename = data['title'] if stream else ytdl.prepare_filename(data)
         return filename
 
-
-@bot.event
-async def on_ready():
-    game = discord.Game("by Vybing")
-    await bot.change_presence(activity=game)
-    print("The bot is ready!")
-
-@bot.command()
-async def hello(ctx):
-    await ctx.send("こんにちは!")
-
-@bot.command(name='join', help='Tells the bot to join the voice channel')
-async def join(ctx):
-    if not ctx.message.author.voice:
-        await ctx.send("{} is not connected to a voice channel".format(ctx.message.author.name))
-        return
-    else:
-        channel = ctx.message.author.voice.channel
-    await channel.connect()
-    await ctx.message.guild.change_voice_state(channel=channel, self_mute=False, self_deaf=True)
+secretFile = open("discordSecret", "r")
+clientID = secretFile.readline()
+secret = secretFile.readline()
+token = secretFile.readline()
+secretFile.close()
 
 
-@bot.command(name='leave', help='To make the bot leave the voice channel')
-async def leave(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_connected():
-        await voice_client.disconnect()
-    else:
-        await ctx.send("Leave: The bot is not connected to a voice channel.")
+#Attempt for custom activity message... Not working
+#intents = discord.Intents().all()
+#activityStatus=discord.Activity(name="Vybing", type=discord.ActivityType.custom)
+#client = discord.Client(intents=intents,activity=activityStatus)
+bot = commands.Bot(command_prefix='?', self_deaf=True)
 
 
-@bot.command(name='play', help='To play song')
-async def play(ctx,*url):
-    try :
-        server = ctx.message.guild
-        voice_channel = server.voice_client
-        async with ctx.typing():
-            url = ''.join(url)
-            filename = await YTDLSource.from_url(url, loop=bot.loop)
-            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename))
-        #Remove file extension from message
-        friendlyFileName = filename.strip("playlist\\")
-        friendlyFileName = friendlyFileName.split('.')[0]
-        friendlyFileName = friendlyFileName.replace("_"," ")
-        await ctx.send('**Now playing:** {}'.format(friendlyFileName))
-    except:
-        await ctx.send("Playing: The bot is not connected to a voice channel.")
-        e = sys.exc_info()[0]
-        print("Error: %s" % e)
+class MusicBot(commands.Cog):
+    def __init__(self, bot:commands.Bot):
+        self.bot = bot
+        self.playlist = {"0":"Chicken Nugget"}
 
 
-@bot.command(name='pause', help='This command pauses the song')
-async def pause(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_playing():
-        await voice_client.pause()
-    else:
-        await ctx.send("Pausing: The bot is not playing anything at the moment.")
-    
-@bot.command(name='resume', help='Resumes the song')
-async def resume(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_paused():
-        await voice_client.resume()
-    else:
-        await ctx.send("The bot was not playing anything before this. Use play command")
+    @bot.event
+    async def on_ready():
+        game = discord.Game("by Vybing")
+        #Supposedly, Discord likely to disconnect bot if change_presence is used. Alternative is to have constructor
+        await bot.change_presence(activity=game)
+        print("The bot is ready!")
 
-@bot.command(name='stop', help='Stops the song')
-async def stop(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_playing():
-        voice_client.stop()
-    else:
-        await ctx.send("Stopping: The bot is not playing anything at the moment.")
+    @commands.command()
+    async def hello(self, ctx):
+        await ctx.send("こんにちは!")
 
+    @commands.command(name='join', help='Tells the bot to join the voice channel')
+    async def join(self, ctx):
+        if not ctx.message.author.voice:
+            await ctx.send("{} is not connected to a voice channel".format(ctx.message.author.name))
+            return
+        else:
+            channel = ctx.message.author.voice.channel
+        await channel.connect()
+        await ctx.message.guild.change_voice_state(channel=channel, self_mute=False, self_deaf=True)
+
+
+    @commands.command(name='leave', help='To make the bot leave the voice channel')
+    async def leave(self, ctx):
+        voice_client = ctx.message.guild.voice_client
+        if voice_client.is_connected():
+            await voice_client.disconnect()
+        else:
+            await ctx.send("Leave: The bot is not connected to a voice channel.")
+
+    #Use *url to accept multiple arguments ("chicken attack" otherwise would only search for "chicken" video)
+    @commands.command(name='play', help='To play song')
+    async def play(self, ctx,*url):
+        try :
+            server = ctx.message.guild
+            voice_channel = server.voice_client
+            if ctx.guild.id in self.player:
+                if ctx.voice_client.is_playing() is True:  # NOTE: SONG CURRENTLY PLAYING
+                    ctx.send("Queueing system coming soon!")
+            async with ctx.typing():
+                url = ''.join(url)
+                filename = await YTDLSource.from_url(url, loop=bot.loop)
+                #Good place to queue playlist
+                voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename))
+            #Remove file extension from message
+            friendlyFileName = filename.strip("playlist\\")
+            friendlyFileName = friendlyFileName.split('.')[0]
+            friendlyFileName = friendlyFileName.replace("_"," ")
+            await ctx.send('**Now playing:** {}'.format(friendlyFileName))
+        except:
+            await ctx.send("Playing: The bot is not connected to a voice channel.")
+            e = sys.exc_info()[0]
+            print("Error: %s" % e)
+
+    @commands.command(name='queue', help='Lists song queue')
+    async def queue(self, ctx):
+        msg = "Queue:\n"
+        for key in self.playlist:
+            msg += key + ": " + self.playlist[key] + "\n"
+        await ctx.send(msg)
+
+    @commands.command(name='pause', help='This command pauses the song')
+    async def pause(self, ctx):
+        voice_client = ctx.message.guild.voice_client
+        if voice_client.is_playing():
+            await voice_client.pause()
+        else:
+            await ctx.send("Pausing: The bot is not playing anything at the moment.")
+        
+    @commands.command(name='resume', help='Resumes the song')
+    async def resume(self, ctx):
+        voice_client = ctx.message.guild.voice_client
+        if voice_client.is_paused():
+            await voice_client.resume()
+        else:
+            await ctx.send("The bot was not playing anything before this. Use play command")
+
+    @commands.command(name='stop', help='Stops the song')
+    async def stop(self, ctx):
+        voice_client = ctx.message.guild.voice_client
+        if voice_client.is_playing():
+            voice_client.stop()
+        else:
+            await ctx.send("Stopping: The bot is not playing anything at the moment.")
+
+bot.add_cog(MusicBot(bot))
 bot.run(token)
