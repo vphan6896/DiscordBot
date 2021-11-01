@@ -22,19 +22,14 @@ ytdl_format_options = {
     'no_warnings': True,
     'progress_hooks': [my_hook],
     'default_search': 'auto',
-    'source_address': '0.0.0.0', # bind to ipv4 since ipv6 addresses cause issues sometimes
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '320',
-        }]
+    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
 }
 ffmpeg_options = {
     'options': '-vn'
 }
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 class YTDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5):
+    def __init__(self, source, *, data, volume=0.2):
         super().__init__(source, volume)
         self.data = data
         self.title = data.get('title')
@@ -112,9 +107,9 @@ class MusicBot(commands.Cog):
         try :
             server = ctx.message.guild
             voice_channel = server.voice_client
-            if ctx.guild.id in self.player:
-                if ctx.voice_client.is_playing() is True:  # NOTE: SONG CURRENTLY PLAYING
-                    ctx.send("Queueing system coming soon!")
+            #SONG CURRENTLY PLAYING
+            if ctx.voice_client.is_playing() is True:
+                ctx.send("Queueing system coming soon!")
             async with ctx.typing():
                 url = ''.join(url)
                 filename = await YTDLSource.from_url(url, loop=bot.loop)
